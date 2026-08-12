@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard de salud - Manu</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="garmin-health-sync/data/garmin_data.js"></script>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0d0d0d; --card:#1a1a19; --border:#2c2c2a; --border-strong:#4a4945; --text:#ffffff; --sub:#c3c2b7; --muted:#898781;
+    --accent:#3987e5; --green:#0ca30c; --amber:#fab219; --red:#d03b3b;
+    --green-bg:rgba(12,163,12,0.16); --amber-bg:rgba(250,178,25,0.16); --red-bg:rgba(208,59,59,0.18); --blue-bg:rgba(57,135,229,0.16);
+  }
+  *{box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:24px;}
+  h1{font-size:20px;font-weight:600;margin:0 0 4px;}
+  .subtitle{color:var(--sub);font-size:13px;margin:0 0 20px;}
+  .tabs{display:flex;gap:8px;margin-bottom:20px;border-bottom:1px solid var(--border);}
+  .tab-btn{background:none;border:none;padding:10px 16px;font-size:14px;font-weight:500;color:var(--sub);cursor:pointer;border-bottom:2px solid transparent;}
+  .tab-btn.active{color:var(--accent);border-bottom:2px solid var(--accent);}
+  .tab-content{display:none;}
+  .tab-content.active{display:block;}
+  .section{margin-bottom:26px;}
+  .section h2{font-size:15px;font-weight:600;margin:0 0 10px;color:var(--text);}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .15s;}
+  .card:hover{border-color:var(--border-strong);}
+  .card.open{border-color:var(--accent);}
+  .card-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;}
+  .card-title{font-size:13px;font-weight:500;color:var(--text);}
+  .badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:20px;white-space:nowrap;}
+  .badge.ok{background:var(--green-bg);color:var(--green);}
+  .badge.warn{background:var(--amber-bg);color:var(--amber);}
+  .badge.bad{background:var(--red-bg);color:var(--red);}
+  .badge.na{background:var(--border);color:var(--muted);}
+  .card-value{font-size:22px;font-weight:600;margin:2px 0 0;}
+  .card-unit{font-size:12px;color:var(--muted);font-weight:400;}
+  .card-ref{font-size:11px;color:var(--muted);margin-top:2px;}
+  .card-trend{font-size:11px;margin-top:6px;color:var(--sub);}
+  .card-hint{font-size:10px;color:var(--muted);margin-top:8px;}
+  .card-chart{display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);height:130px;}
+  .card.open .card-chart{display:block;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;font-weight:600;color:var(--sub);font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:8px 10px;border-bottom:1px solid var(--border);}
+  td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  .timeline{position:relative;padding-left:26px;}
+  .timeline::before{content:'';position:absolute;left:6px;top:6px;bottom:6px;width:2px;background:var(--border);}
+  .t-item{position:relative;margin-bottom:22px;}
+  .t-item::before{content:'';position:absolute;left:-24px;top:4px;width:12px;height:12px;border-radius:50%;background:var(--accent);border:2px solid var(--card);}
+  .t-date{font-size:15px;font-weight:600;}
+  .t-lab{font-size:12px;color:var(--sub);margin:2px 0 8px;}
+  .t-tests{font-size:12px;color:var(--text);line-height:1.6;}
+  .t-file{display:inline-block;margin-top:8px;font-size:11px;color:var(--muted);background:var(--border);padding:2px 8px;border-radius:6px;}
+  .t-toggle{display:inline-flex;align-items:center;gap:4px;margin-top:10px;font-size:12px;font-weight:500;color:var(--accent);background:none;border:none;cursor:pointer;padding:0;}
+  .t-report{display:none;margin-top:14px;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+  .t-item.open .t-report{display:block;}
+  .rep-cat{font-size:12px;font-weight:600;padding:10px 14px 4px;color:var(--sub);background:#141413;}
+  .next-box{background:var(--blue-bg);border-radius:12px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#9ec5f4;}
+  .next-box b{display:block;font-size:14px;margin-bottom:2px;}
+  .legend-note{font-size:11px;color:var(--muted);margin:6px 0 20px;}
+  .range-btns{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;}
+  .range-btn{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:500;color:var(--sub);cursor:pointer;}
+  .range-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .garmin-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;}
+  .garmin-card .card-title{font-size:13px;font-weight:500;color:var(--text);}
+  .garmin-card .card-value{font-size:20px;font-weight:600;margin:2px 0 10px;}
+  .garmin-card .card-unit{font-size:12px;color:var(--muted);font-weight:400;}
+  .garmin-chart{height:140px;}
+  .garmin-empty{color:var(--muted);font-size:13px;padding:20px;background:var(--card);border:1px dashed var(--border);border-radius:12px;}
+  .garmin-legend{font-size:11px;color:var(--muted);margin-bottom:14px;}
+  .garmin-legend .dash{display:inline-block;width:14px;border-top:2px dashed var(--red);vertical-align:middle;margin-right:4px;}
+  .ctx-box{background:#141413;border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-top:12px;font-size:12px;color:var(--sub);}
+  .ctx-box b{color:var(--text);display:block;margin-bottom:4px;font-size:11px;text-transform:uppercase;letter-spacing:.03em;}
+  .ctx-grid{display:flex;flex-wrap:wrap;gap:14px;}
+  .ctx-item{min-width:90px;}
+  .ctx-item .v{font-size:14px;font-weight:600;color:var(--text);}
+  .ctx-item .l{font-size:10px;color:var(--muted);}
+</style>
+</head>
+<body>
+
+<h1>Dashboard de salud — Emanuel Galán de Malta</h1>
+<p class="subtitle">3 análisis registrados: 08/08/2023 · 17/06/2025 · 23/07/2026 — actualizá este archivo cada vez que subas un análisis nuevo.</p>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="evolucion">Evolución</button>
+  <button class="tab-btn" data-tab="controles">Controles realizados</button>
+  <button class="tab-btn" data-tab="garmin">Garmin</button>
+</div>
+
+<div id="evolucion" class="tab-content active">
+  <div id="alert-section" class="section" style="display:none;">
+    <h2 style="color:var(--red);">⚠ Fuera de rango en tu último análisis (23/07/2026)</h2>
+    <div id="alert-grid" class="grid"></div>
+  </div>
+  <div class="legend-note">Tocá cualquier tarjeta para ver su evolución en línea, con el rango óptimo sombreado. Los badges muestran el estado del último valor (23/07/2026): <span class="badge ok">normal</span> <span class="badge warn">límite</span> <span class="badge bad">fuera de rango</span> — <span class="badge na">*</span> sin rango propio en los informes, se usa un valor de referencia clínico general.</div>
+  <div id="sections"></div>
+</div>
+
+<div id="controles" class="tab-content">
+  <div class="next-box"><b>Próximo control sugerido: julio/agosto 2027</b>Con base en tu frecuencia habitual (aprox. anual), este sería el momento de repetir el panel completo.</div>
+  <div class="timeline" id="timeline"></div>
+</div>
+
+<div id="garmin" class="tab-content">
+  <div id="garmin-empty" class="garmin-empty" style="display:none;">
+    Todavía no hay datos de Garmin sincronizados en esta carpeta (falta <code>garmin-health-sync/data/garmin_data.js</code>). Corré <code>garmin_sync.py</code> o esperá la próxima corrida del cron de las 8am.
+  </div>
+  <div id="garmin-content" style="display:none;">
+    <div class="range-btns" id="range-btns"></div>
+    <div class="garmin-legend"><span class="dash"></span>fecha de un análisis de sangre</div>
+    <div class="grid" id="garmin-grid"></div>
+  </div>
+</div>
+
+<script>
+const DATES = ["08/08/2023","17/06/2025","23/07/2026"];
+
+// ref = rango de referencia vigente, tomado siempre del informe más reciente que lo incluye
+// (evita mezclar criterios de distintos laboratorios). approx:true = no viene en ningún
+// informe propio, se usa un valor clínico general de referencia.
+const INDICATORS = [
+  {group:"Perfil lipídico y riesgo cardiovascular", items:[
+    {id:"col-total", label:"Colesterol total", unit:"mg/dl", ref:[150,200], values:[235,223,244]},
+    {id:"ldl", label:"Colesterol LDL", unit:"mg/dl", ref:[70,130], values:[134,125,169]},
+    {id:"hdl", label:"Colesterol HDL", unit:"mg/dl", ref:[40,65], values:[90,87,59]},
+    {id:"trig", label:"Triglicéridos", unit:"mg/dl", ref:[35,150], values:[66,64,80]},
+    {id:"indice-riesgo", label:"Índice de riesgo (Col.total/HDL)", unit:"", ref:[0,4.5], values:[2.61,2.56,4.14]},
+    {id:"apob", label:"Apolipoproteína B", unit:"mg/dl", ref:[66,144], values:[null,90.0,107.80]},
+    {id:"apoa1", label:"Apolipoproteína A1", unit:"mg/dl", ref:[104,202], values:[null,202,172]},
+  ]},
+  {group:"Metabolismo de la glucosa", items:[
+    {id:"glucemia", label:"Glucemia (ayunas)", unit:"mg/dl", ref:[70,110], values:[87,88,97]},
+    {id:"hba1c", label:"Hemoglobina glicosilada (HbA1c)", unit:"%", ref:[4.8,5.9], values:[4.9,4.8,5.2]},
+    {id:"insulina", label:"Insulina (ayunas)", unit:"uUI/ml", ref:[2.00,14.50], values:[4.1,5.30,5.10]},
+  ]},
+  {group:"Ácido úrico y homocisteína", items:[
+    {id:"acido-urico", label:"Ácido úrico", unit:"mg/dl", ref:[3.4,7.0], values:[7.2,8.6,8.2]},
+    {id:"homocisteina", label:"Homocisteína", unit:"umol/l", ref:[3.70,13.90], values:[13.90,12.00,15.20]},
+    {id:"pcr", label:"Proteína C reactiva", unit:"mg/l", ref:[0,5.0], values:[4.0,5.0,2.7]},
+  ]},
+  {group:"Función renal", items:[
+    {id:"creatinina", label:"Creatinina", unit:"mg/dl", ref:[0.70,1.40], values:[1.28,1.30,0.96]},
+    {id:"uremia", label:"Uremia", unit:"mg/dl", ref:[15,50], values:[44,49,34]},
+  ]},
+  {group:"Hemograma", items:[
+    {id:"hemoglobina", label:"Hemoglobina", unit:"g/dl", ref:[13,17], values:[14.4,15.0,15.3], approx:true},
+    {id:"leucocitos", label:"Leucocitos", unit:"x10³/mm³", ref:[4.5,11], values:[3.4,4.6,3.7], approx:true},
+    {id:"plaquetas", label:"Plaquetas", unit:"x10³/ul", ref:[150,400], values:[236,225,246]},
+  ]},
+  {group:"Tiroides", items:[
+    {id:"tsh", label:"TSH", unit:"uUI/ml", ref:[0.40,4.00], values:[null,1.46,1.07]},
+    {id:"t4l", label:"T4 libre", unit:"ng/dl", ref:[0.89,1.76], values:[null,1.43,1.07]},
+  ]},
+  {group:"Vitaminas, minerales y hierro", items:[
+    {id:"vitd", label:"Vitamina D", unit:"ng/ml", ref:[30,100], values:[43,38,41.4]},
+    {id:"b12", label:"Vitamina B12", unit:"pg/ml", ref:[210,910], values:[597,422,398]},
+    {id:"folico", label:"Ácido fólico", unit:"ng/ml", ref:[5.2,20], values:[6.4,5.7,8.5]},
+    {id:"ferritina", label:"Ferritina", unit:"ng/ml", ref:[21.8,274.0], values:[null,181,188.2]},
+    {id:"ferremia", label:"Ferremia", unit:"ug/dl", ref:[65,175], values:[99,90,100]},
+    {id:"zinc", label:"Zinc", unit:"ug/dl", ref:[60,120], values:[87,77,103]},
+    {id:"selenio", label:"Selenio", unit:"ug/l", ref:[110,165], values:[92,88,118.26]},
+  ]},
+  {group:"Electrolitos y otros minerales", items:[
+    {id:"calcio", label:"Calcio", unit:"mg/dl", ref:[8.5,10.5], values:[10.5,9.9,8.92]},
+    {id:"fosforo", label:"Fósforo", unit:"mg/dl", ref:[2.7,4.5], values:[4.5,4.9,3.90]},
+    {id:"magnesio", label:"Magnesio", unit:"mg/dl", ref:[1.6,2.6], values:[2.00,2.16,2.12]},
+    {id:"sodio", label:"Sodio", unit:"mmol/l", ref:[135,146], values:[140,139,137]},
+    {id:"potasio", label:"Potasio", unit:"mmol/l", ref:[3.5,5.3], values:[4.2,4.0,4.70]},
+  ]},
+];
+
+// datos completos por fecha para la vista "Controles" (historial tal cual figura en cada informe)
+// formato de cada item: [etiqueta, valor, unidad, referencia_mostrada, estado]  estado: ok | warn | bad | na
+const REPORTS = {
+"08/08/2023":[
+  {cat:"Hemograma", items:[
+    ["Hematíes","4.590.000","/mm3","-","na"],
+    ["Leucocitos","3.400","/mm3","habitual 4.500-11.000 (no incluida en informe)","warn"],
+    ["Hemoglobina","14.4","g/dl","-","ok"],
+    ["Hematocrito","43","%","-","ok"],
+    ["VCM","92.7","fl","80 - 97","ok"],
+    ["HbCM","31.4","pg","26 - 32","ok"],
+    ["CHbCM","33.9","g/dl","31 - 34","ok"],
+    ["Neutrófilos","47","%","-","na"],
+    ["Eosinófilos","5","%","-","na"],
+    ["Basófilos","1","%","-","na"],
+    ["Linfocitos","38","%","-","na"],
+    ["Monocitos","9","%","-","na"],
+    ["Morfología","Normocromía, normocitosis","","-","na"],
+    ["Plaquetas","236.000","/mm3","150.000 - 400.000","ok"],
+    ["Eritrosedimentación","11","mm","hombres 0-15","ok"],
+  ]},
+  {cat:"Metabólico y renal", items:[
+    ["Uremia","0.44","g/l","0.15 - 0.45","ok"],
+    ["Creatinina","1.28","mg/dl","0.70 - 1.40","ok"],
+    ["Glucemia (ayunas)","0.87","g/l","0.70 - 1.10","ok"],
+    ["HbA1c","4.9","%","4.0 - 6.2","ok"],
+  ]},
+  {cat:"Hepatograma y lípidos", items:[
+    ["Colesterol total","2.35","g/l","hasta 2.00","bad"],
+    ["GOT","20","U/l","hasta 46","ok"],
+    ["GPT","13","U/l","hasta 40","ok"],
+    ["Fosfatasa alcalina","164","U/l","adultos hasta 300","ok"],
+    ["Bilirrubina total","0.53","mg/dl","hasta 1.00","ok"],
+    ["Bilirrubina directa","0.10","mg/dl","hasta 0.20","ok"],
+    ["Bilirrubina indirecta","0.43","mg/dl","hasta 0.80","ok"],
+    ["Colesterol HDL","0.90","g/l","hombre > 0.40","ok"],
+    ["Índice Col.Total/HDL","2.61","","sin riesgo < 4.5","ok"],
+    ["Colesterol LDL","1.34","g/l","deseable < 1.30","warn"],
+    ["Triglicéridos","0.66","g/l","hasta 1.50","ok"],
+    ["Ácido úrico","7.2","mg/dl","hombre hasta 7.0","warn"],
+  ]},
+  {cat:"Minerales e ionograma", items:[
+    ["Calcemia","10.5","mg/dl","8.5 - 10.5","ok"],
+    ["Fosfatemia","4.5","mg/dl","adultos 2.8 - 4.5","ok"],
+    ["Magnesio","2.00","mg/dl","1.60 - 2.60","ok"],
+    ["Ferremia","99","ug/dl","60 - 160","ok"],
+    ["Sodio","140","meq/l","135 - 145","ok"],
+    ["Potasio","4.2","meq/l","3.6 - 5.1","ok"],
+  ]},
+  {cat:"Inflamación y vitaminas", items:[
+    ["PCR","0.40","mg/dl","hasta 0.8","ok"],
+    ["Homocisteína","13.90","umol/l","normal 5 - 15","ok"],
+    ["Vitamina D","43","ng/ml","suficiencia 40 - 80","ok"],
+    ["Vitamina B12","597","pg/ml","250 - 900","ok"],
+    ["Insulina","4.1","uUI/ml","3.0 - 23.5","ok"],
+    ["Ácido fólico","6.4","ng/ml","5.2 - 20.0","ok"],
+    ["Zinc","0.87","ug/mL","0.66 - 1.10","ok"],
+    ["Selenio","92","ng/mL","> 1 año 70 - 150","ok"],
+  ]},
+  {cat:"Proteinograma y orina", items:[
+    ["Proteínas totales","7.40","g/dl","6.20 - 8.00","ok"],
+    ["Albúmina","4.40","g/dl","3.57 - 5.48","ok"],
+    ["Relación Alb/Glob","1.47","","1.1 - 2.2","ok"],
+    ["Proteinograma","Normal","","-","ok"],
+    ["Orina completa","Sin alteraciones significativas","","-","na"],
+  ]},
+],
+"17/06/2025":[
+  {cat:"Hemograma", items:[
+    ["Hematíes","4.700.000","/mm3","-","na"],
+    ["Leucocitos","4.600","/mm3","habitual 4.500-11.000 (no incluida en informe)","ok"],
+    ["Hemoglobina","15.0","g/dl","-","ok"],
+    ["Hematocrito","43","%","-","ok"],
+    ["VCM","90.4","fL","80 - 98","ok"],
+    ["HbCM","31.9","pg","27 - 32","ok"],
+    ["CHbCM","35.3","g/dl","32 - 36","ok"],
+    ["RDW-SD","38","fL","35 - 46","ok"],
+    ["Neutrófilos","49 % / 2.200 abs","","55-75% / 2500-7500","warn"],
+    ["Eosinófilos","5 % / 200 abs","","1-4% / 50-500","warn"],
+    ["Basófilos","0 % / 0 abs","","0-1% / 10-150","warn"],
+    ["Linfocitos","37 % / 1.700 abs","","17-45% / 1500-4500","ok"],
+    ["Monocitos","9 % / 400 abs","","2-8% / 200-800","warn"],
+    ["Morfología","Normocromía, normocitosis","","-","na"],
+    ["Plaquetas","225.000","/mm3","150.000 - 400.000","ok"],
+    ["Eritrosedimentación","9","mm","hombres 0-15","ok"],
+  ]},
+  {cat:"Metabólico y renal", items:[
+    ["Uremia","0.49","g/l","0.15 - 0.45","warn"],
+    ["Creatinina","1.30","mg/dl","0.70 - 1.40","ok"],
+    ["Glucemia (ayunas)","0.88","g/l","0.70 - 1.10","ok"],
+    ["HbA1c","4.8","%","no diabético 4.8 - 5.9","ok"],
+    ["Insulina","5.30","uUI/ml","4.03 - 23.46","ok"],
+  ]},
+  {cat:"Hepatograma y lípidos", items:[
+    ["Colesterol total","2.23","g/L","hasta 2.00","bad"],
+    ["GOT","21","U/l","hasta 46","ok"],
+    ["GPT","17","U/l","hasta 40","ok"],
+    ["Fosfatasa alcalina","160","U/l","adultos hasta 300","ok"],
+    ["Bilirrubina total","0.35","mg/dl","hasta 1.00","ok"],
+    ["Bilirrubina directa","0.09","mg/dl","hasta 0.20","ok"],
+    ["Bilirrubina indirecta","0.26","mg/dl","hasta 0.80","ok"],
+    ["Colesterol HDL","0.87","g/L","hombre > 0.40","ok"],
+    ["Índice Col.Total/HDL","2.56","","sin riesgo < 4.5","ok"],
+    ["Colesterol LDL","1.25","g/L","deseable < 1.30","ok"],
+    ["Triglicéridos","0.64","g/l","hasta 1.50","ok"],
+    ["Ácido úrico","8.6","mg/dl","hombre hasta 7.0","bad"],
+    ["Apolipoproteína B","90.0","mg/dL","hombre 66 - 133","ok"],
+    ["Apolipoproteína A","202","mg/dL","hombre 104 - 202","ok"],
+  ]},
+  {cat:"Minerales, ionograma y tiroides", items:[
+    ["Calcemia","9.9","mg/dl","8.5 - 10.5","ok"],
+    ["Fosfatemia","4.9","mg/dl","adultos 2.8 - 4.5","bad"],
+    ["Magnesio","2.16","mg/dl","1.60 - 2.60","ok"],
+    ["Ferremia","90","ug/dl","60 - 160","ok"],
+    ["Ferritina","181","ng/ml","hombre 25 - 350","ok"],
+    ["Sodio","139","meq/l","135 - 145","ok"],
+    ["Potasio","4.0","meq/l","3.6 - 5.1","ok"],
+    ["TSH","1.46","uUI/ml","0.30 - 4.50","ok"],
+    ["T4 libre","1.43","ng/dl","0.89 - 1.72","ok"],
+  ]},
+  {cat:"Inflamación y vitaminas", items:[
+    ["PCR","0.50","mg/dl","hasta 0.8","ok"],
+    ["Homocisteína","12.00","umol/l","< 15","ok"],
+    ["Vitamina D","38","ng/ml","óptimo 30 - 100","ok"],
+    ["Vitamina B12","422","pg/ml","200 - 1100","ok"],
+    ["Ácido fólico","5.7","ng/ml","5.2 - 20.0","ok"],
+    ["Zinc","0.77","ug/mL","0.66 - 1.10","ok"],
+    ["Selenio","88","ng/mL","> 1 año 70 - 150","ok"],
+  ]},
+],
+"23/07/2026":[
+  {cat:"Hemograma", items:[
+    ["Hematíes","4.75","10e12/l","-","na"],
+    ["Leucocitos","3.7","10e9/l","habitual 4.5-11 (no incluida en informe)","warn"],
+    ["Hemoglobina","15.3","g/dl","-","ok"],
+    ["Hematocrito","43.4","%","-","ok"],
+    ["VCM","91.3","fl","-","na"],
+    ["HCM","32.3","pg","-","na"],
+    ["Neutrófilos","40.26 % / 1.49 abs","","-","na"],
+    ["Eosinófilos","5.93 % / 0.22 abs","","-","na"],
+    ["Basófilos","0.93 % / 0.03 abs","","-","na"],
+    ["Linfocitos","43.09 % / 1.60 abs","","-","na"],
+    ["Monocitos","9.78 % / 0.36 abs","","-","na"],
+    ["Plaquetas","246","10e3/ul","150 - 400","ok"],
+  ]},
+  {cat:"Tiroides e ionograma", items:[
+    ["TSH","1.07","uUI/ml","0.40 - 4.00","ok"],
+    ["T4 libre","1.07","ng/dl","0.89 - 1.76","ok"],
+    ["Sodio","137.00","mmol/l","135 - 146","ok"],
+    ["Potasio","4.70","mmol/l","3.50 - 5.30","ok"],
+    ["Cloro","102.00","mmol/l","98 - 110","ok"],
+  ]},
+  {cat:"Minerales y oligoelementos", items:[
+    ["Magnesio","2.12","mg/dl","1.60 - 2.60","ok"],
+    ["Calcio","8.92","mg/dl","8.50 - 10.50","ok"],
+    ["Fósforo","3.90","mg/dl","2.7 - 4.5 (12-60 años)","ok"],
+    ["Selenio","118.26","ug/l",">17 años 110 - 165","ok"],
+    ["Zinc","103.00","ug/dl","60 - 120","ok"],
+    ["Ferremia","100","ug/dl","65 - 175","ok"],
+    ["Ferritina","188.2","ng/ml","21.8 - 274.0","ok"],
+  ]},
+  {cat:"Vitaminas e inflamación", items:[
+    ["Vitamina D","41.40","ng/ml","20 - 100","ok"],
+    ["Vitamina B12","398.00","pg/ml","210 - 910","ok"],
+    ["Ácido fólico","8.50","ng/ml","> 5.3","ok"],
+    ["Homocisteína","15.20","umol/l","3.70 - 13.90","bad"],
+    ["Eritrosedimentación","10","mm","2 - 12","ok"],
+    ["Proteína C reactiva","2.7","mg/l","0.0 - 5.0","ok"],
+  ]},
+  {cat:"Metabolismo de la glucosa", items:[
+    ["Glucemia","97","mg/dl","70 - 110","ok"],
+    ["Insulina","5.10","uUI/ml","2.00 - 14.50","ok"],
+    ["HbA1c","5.20","%","4.80 - 5.90","ok"],
+    ["Ácido úrico","8.20","mg/dl","3.40 - 7.00","bad"],
+  ]},
+  {cat:"Hepatograma y lípidos", items:[
+    ["Bilirrubina directa","0.2","mg/dl","0.1 - 0.3","ok"],
+    ["Bilirrubina indirecta","0.4","mg/dl","0.1 - 0.8","ok"],
+    ["Bilirrubina total","0.5","mg/dl","0.2 - 1.1","ok"],
+    ["Fosfatasa alcalina","77.00","U/L","53 - 128","ok"],
+    ["GPT","15.00","U/L","10 - 35","ok"],
+    ["GOT","20.00","U/L","10 - 40","ok"],
+    ["Proteínas totales","7.60","g/dl","6.40 - 8.20","ok"],
+    ["Albúmina","4.40","g/dl","3.50 - 5.00","ok"],
+    ["Seroglobulinas","3.20","g/dl","2.50 - 3.30","ok"],
+    ["Colesterol total","244.00","mg/dl","150 - 200","bad"],
+    ["Colesterol HDL","59","mg/dl","40 - 65","ok"],
+    ["Índice de Castelli","4.14","","3.80 - 5.90","ok"],
+    ["Colesterol LDL","169.00","mg/dl","70 - 130","bad"],
+    ["Triglicéridos","80.00","mg/dl","35 - 150","ok"],
+    ["Apolipoproteína A1","172.00","mg/dL","104 - 202","ok"],
+    ["Apolipoproteína B","107.80","mg/dl","66 - 144","ok"],
+  ]},
+  {cat:"Función renal", items:[
+    ["Creatinina","0.96","mg/dl","0.50 - 1.40","ok"],
+    ["Uremia","34","mg/dl","15 - 50","ok"],
+  ]},
+],
+};
+
+const TIMELINE_META = [
+  {date:"23/07/2026", label:"23 de julio de 2026", lab:"Fundación Instituto Quirúrgico del Callao — Dra. Silvestrini · Prescriptor: Dr. Abate", file:"InformeLaboratorio - Julio 2026 Manu Galan de Malta.pdf"},
+  {date:"17/06/2025", label:"17 de junio de 2025", lab:"Laboratorio Roca — Dr. Guzzetti / Dra. Mazzeo", file:"Galan De Malta Emanuel - JUNIO 2025.pdf"},
+  {date:"08/08/2023", label:"8 de agosto de 2023", lab:"Laboratorio Roca — Dr. Guzzetti / Dra. Mazzeo · Solicitado por Dr. Stochetti", file:"GALAN DE MALTA- Agosto 2023.pdf"},
+];
+
+const badgeText = s => s==="ok"?"normal":s==="warn"?"límite":s==="bad"?"fuera de rango":"s/d";
+
+function statusOf(ind){
+  const v = ind.values[ind.values.length-1];
+  if(v===null || v===undefined) return "na";
+  const [lo,hi] = ind.ref;
+  if(v<lo || v>hi){
+    const margin = (hi-lo)*0.08;
+    if(v>=lo-margin && v<=hi+margin) return "warn";
+    return "bad";
+  }
+  return "ok";
+}
+function trendText(ind){
+  const vals = ind.values.filter(v=>v!==null && v!==undefined);
+  if(vals.length<2) return "sin datos suficientes";
+  const first = vals[0], last = vals[vals.length-1];
+  const diff = last-first;
+  if(Math.abs(diff) < Math.abs(first)*0.03) return "estable";
+  const dir = diff>0 ? "subió" : "bajó";
+  const arrow = diff>0 ? "↑" : "↓";
+  return arrow+" "+dir+" desde "+DATES[0];
+}
+
+const statusColor = s => s==='ok' ? '#0ca30c' : s==='warn' ? '#fab219' : s==='bad' ? '#d03b3b' : '#898781';
+const CHART_INK = '#898781';
+const CHART_GRID = '#2c2c2a';
+const chartTooltipTheme = { backgroundColor:'#1a1a19', titleColor:'#ffffff', bodyColor:'#c3c2b7', borderColor:'#383835', borderWidth:1 };
+
+// plugin para sombrear el rango óptimo detrás de la línea
+const refBandPlugin = {
+  id:'refBand',
+  beforeDatasetsDraw(chart, args, opts){
+    if(!opts || opts.lo==null || opts.hi==null) return;
+    const {ctx, chartArea, scales} = chart;
+    const y = scales.y;
+    const top = y.getPixelForValue(opts.hi);
+    const bottom = y.getPixelForValue(opts.lo);
+    ctx.save();
+    ctx.fillStyle = opts.color || 'rgba(59,109,17,0.12)';
+    ctx.fillRect(chartArea.left, Math.max(top,chartArea.top), chartArea.right-chartArea.left, Math.min(bottom,chartArea.bottom)-Math.max(top,chartArea.top));
+    ctx.restore();
+  }
+};
+Chart.register(refBandPlugin);
+
+const sectionsEl = document.getElementById('sections');
+let cardIdx = 0;
+const cardRegistry = {};
+
+function buildCard(ind){
+  const st = statusOf(ind);
+  const last = ind.values[ind.values.length-1];
+  const chartId = 'card-chart-'+(cardIdx++);
+  const card = document.createElement('div');
+  card.className='card';
+  card.id = 'card-'+ind.id;
+  card.innerHTML = `
+    <div class="card-head">
+      <span class="card-title">${ind.label}</span>
+      <span class="badge ${st}">${badgeText(st)}</span>
+    </div>
+    <div class="card-value">${last!==null && last!==undefined?last:"—"} <span class="card-unit">${ind.unit}</span></div>
+    <div class="card-ref">Ref: ${ind.ref[0]} – ${ind.ref[1]}${ind.approx?' *':''}</div>
+    <div class="card-trend">${trendText(ind)}</div>
+    <div class="card-hint">Tocar para ver evolución</div>
+    <div class="card-chart"><canvas id="${chartId}"></canvas></div>
+  `;
+  let created = false;
+  function open(){
+    if(!card.classList.contains('open')) card.classList.add('open');
+    if(!created){
+      created = true;
+      const [lo,hi] = ind.ref;
+      const nums = ind.values.filter(v=>v!==null && v!==undefined);
+      let yMin = Math.min(lo, ...nums);
+      let yMax = Math.max(hi, ...nums);
+      const pad = ((yMax-yMin)||1)*0.12;
+      yMin -= pad; yMax += pad;
+      new Chart(document.getElementById(chartId), {
+        type:'line',
+        data:{
+          labels: DATES,
+          datasets:[{
+            data: ind.values,
+            borderColor: st==='ok' ? '#3987e5' : '#e66767',
+            backgroundColor: st==='ok' ? '#3987e5' : '#e66767',
+            spanGaps:true,
+            tension:0.25,
+            pointRadius:4,
+          }]
+        },
+        options:{
+          responsive:true,
+          maintainAspectRatio:false,
+          plugins:{
+            legend:{display:false},
+            tooltip: chartTooltipTheme,
+            refBand:{ lo: lo, hi: hi, color:'rgba(12,163,12,0.16)' }
+          },
+          scales:{
+            y:{ min:yMin, max:yMax, ticks:{font:{size:10}, color:CHART_INK}, grid:{color:CHART_GRID} },
+            x:{ ticks:{font:{size:10}, color:CHART_INK}, grid:{color:CHART_GRID} }
+          },
+        }
+      });
+    }
+  }
+  card.addEventListener('click', ()=>{
+    card.classList.contains('open') ? card.classList.remove('open') : open();
+  });
+  cardRegistry[ind.id] = {el: card, open};
+  return card;
+}
+
+INDICATORS.forEach(group=>{
+  const section = document.createElement('div');
+  section.className='section';
+  const h2 = document.createElement('h2');
+  h2.textContent = group.group;
+  section.appendChild(h2);
+  const grid = document.createElement('div');
+  grid.className='grid';
+  section.appendChild(grid);
+  sectionsEl.appendChild(section);
+  group.items.forEach(ind=> grid.appendChild(buildCard(ind)));
+});
+
+// sección "fuera de rango": acceso rápido a lo que hoy no está bien
+const outOfRange = [];
+INDICATORS.forEach(group=> group.items.forEach(ind=>{
+  const st = statusOf(ind);
+  if(st==='bad' || st==='warn') outOfRange.push({ind, st});
+}));
+outOfRange.sort((a,b)=> (a.st==='bad'?0:1) - (b.st==='bad'?0:1));
+
+if(outOfRange.length){
+  document.getElementById('alert-section').style.display = '';
+  const alertGrid = document.getElementById('alert-grid');
+  outOfRange.forEach(({ind,st})=>{
+    const last = ind.values[ind.values.length-1];
+    const chip = document.createElement('div');
+    chip.className = 'card';
+    chip.style.borderColor = st==='bad' ? 'var(--red)' : 'var(--amber)';
+    chip.innerHTML = `
+      <div class="card-head">
+        <span class="card-title">${ind.label}</span>
+        <span class="badge ${st}">${badgeText(st)}</span>
+      </div>
+      <div class="card-value">${last} <span class="card-unit">${ind.unit}</span></div>
+      <div class="card-ref">Ref: ${ind.ref[0]} – ${ind.ref[1]}${ind.approx?' *':''}</div>
+    `;
+    chip.addEventListener('click', ()=>{
+      const target = cardRegistry[ind.id];
+      target.open();
+      target.el.scrollIntoView({behavior:'smooth', block:'center'});
+    });
+    alertGrid.appendChild(chip);
+  });
+}
+
+// --- integración de datos diarios de Garmin (data/garmin_data.js) ---
+function toISO(ddmmyyyy){
+  const [d,m,y] = ddmmyyyy.split('/');
+  return `${y}-${m}-${d}`;
+}
+
+function garminContextFor(ddmmyyyy, windowDays=30){
+  if(typeof GARMIN_DAILY === 'undefined' || !GARMIN_DAILY.length) return null;
+  const end = new Date(toISO(ddmmyyyy));
+  const start = new Date(end); start.setDate(start.getDate()-windowDays);
+  const rows = GARMIN_DAILY.filter(r=>{
+    const d = new Date(r.date);
+    return d>=start && d<=end;
+  });
+  if(!rows.length) return null;
+  const avg = key=>{
+    const vals = rows.map(r=>r[key]).filter(v=>v!==null && v!==undefined);
+    return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+  };
+  return {
+    days: rows.length,
+    steps: avg('steps'),
+    resting_hr: avg('resting_hr'),
+    sleep_hours: avg('sleep_hours'),
+    avg_stress: avg('avg_stress'),
+    body_weight_kg: avg('body_weight_kg'),
+  };
+}
+
+function ctxBoxHtml(ctx){
+  if(!ctx) return `<div class="ctx-box"><b>Contexto Garmin (30 días previos)</b>Sin datos de Garmin sincronizados para este período.</div>`;
+  const fmt = (v,d=0)=> v===null || v===undefined ? '—' : v.toFixed(d);
+  return `<div class="ctx-box">
+    <b>Contexto Garmin — promedio de ${ctx.days} día(s) previos</b>
+    <div class="ctx-grid">
+      <div class="ctx-item"><div class="v">${fmt(ctx.steps,0)}</div><div class="l">pasos/día</div></div>
+      <div class="ctx-item"><div class="v">${fmt(ctx.resting_hr,0)}</div><div class="l">FC reposo (lpm)</div></div>
+      <div class="ctx-item"><div class="v">${fmt(ctx.sleep_hours,1)}</div><div class="l">horas de sueño</div></div>
+      <div class="ctx-item"><div class="v">${fmt(ctx.avg_stress,0)}</div><div class="l">estrés promedio</div></div>
+      <div class="ctx-item"><div class="v">${ctx.body_weight_kg===null?'—':fmt(ctx.body_weight_kg,1)+' kg'}</div><div class="l">peso corporal</div></div>
+    </div>
+  </div>`;
+}
+
+// pestaña de controles: línea de tiempo con resultados completos por fecha
+const timelineEl = document.getElementById('timeline');
+TIMELINE_META.forEach(meta=>{
+  const item = document.createElement('div');
+  item.className='t-item';
+  const cats = REPORTS[meta.date] || [];
+  const reportHtml = cats.map(c=>{
+    const rows = c.items.map(([label,value,unit,ref,status])=>`
+      <tr>
+        <td>${label}</td>
+        <td>${value}${unit?' '+unit:''}</td>
+        <td style="color:var(--muted);font-size:12px;">${ref}</td>
+        <td>${status==='na'?'':'<span class="badge '+status+'">'+badgeText(status)+'</span>'}</td>
+      </tr>`).join('');
+    return `<div class="rep-cat">${c.cat}</div><table>${rows}</table>`;
+  }).join('');
+  item.innerHTML = `
+    <div class="t-date">${meta.label}</div>
+    <div class="t-lab">${meta.lab}</div>
+    ${ctxBoxHtml(garminContextFor(meta.date))}
+    <button class="t-toggle">Ver resultados completos ▾</button>
+    <span class="t-file">${meta.file}</span>
+    <div class="t-report">${reportHtml}</div>
+  `;
+  item.querySelector('.t-toggle').addEventListener('click', ()=>{
+    item.classList.toggle('open');
+    const btn = item.querySelector('.t-toggle');
+    btn.textContent = item.classList.contains('open') ? 'Ocultar resultados ▴' : 'Ver resultados completos ▾';
+  });
+  timelineEl.appendChild(item);
+});
+
+// --- pestaña Garmin: tendencias diarias con selector de rango ---
+const GARMIN_METRICS = [
+  {key:'steps', label:'Pasos', unit:'', color:'#3987e5'},
+  {key:'resting_hr', label:'FC en reposo', unit:'lpm', color:'#d95926'},
+  {key:'sleep_hours', label:'Horas de sueño', unit:'h', color:'#199e70'},
+  {key:'sleep_score', label:'Score de sueño', unit:'', color:'#c98500'},
+  {key:'avg_stress', label:'Estrés promedio', unit:'', color:'#d55181'},
+  {key:'body_weight_kg', label:'Peso corporal', unit:'kg', color:'#008300'},
+  {key:'calories_total', label:'Calorías totales', unit:'kcal', color:'#9085e9'},
+  {key:'active_minutes', label:'Minutos activos', unit:'min', color:'#e66767'},
+];
+const GARMIN_RANGES = [
+  {label:'7D', days:7}, {label:'30D', days:30}, {label:'90D', days:90},
+  {label:'1A', days:365}, {label:'Todo', days:null},
+];
+let currentRangeDays = 90;
+let garminCharts = {};
+let garminInitialized = false;
+const analysisMarkersISO = TIMELINE_META.map(m=>toISO(m.date));
+
+const analysisLinePlugin = {
+  id:'analysisLines',
+  afterDatasetsDraw(chart, args, opts){
+    if(!opts || !opts.dates) return;
+    const {ctx, chartArea, scales} = chart;
+    const xScale = scales.x;
+    const labels = chart.data.labels;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(230,103,103,0.65)';
+    ctx.setLineDash([4,3]);
+    ctx.lineWidth = 1;
+    opts.dates.forEach(iso=>{
+      const idx = labels.indexOf(iso);
+      if(idx===-1) return;
+      const x = xScale.getPixelForValue(idx);
+      ctx.beginPath();
+      ctx.moveTo(x, chartArea.top);
+      ctx.lineTo(x, chartArea.bottom);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+};
+Chart.register(analysisLinePlugin);
+
+function filteredGarminData(days){
+  if(typeof GARMIN_DAILY === 'undefined' || !GARMIN_DAILY.length) return [];
+  const sorted = [...GARMIN_DAILY].sort((a,b)=> a.date.localeCompare(b.date));
+  if(days===null) return sorted;
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-days);
+  return sorted.filter(r=> new Date(r.date) >= cutoff);
+}
+
+function renderGarminGrid(){
+  const rows = filteredGarminData(currentRangeDays);
+  const grid = document.getElementById('garmin-grid');
+  Object.values(garminCharts).forEach(c=>c.destroy());
+  garminCharts = {};
+  grid.innerHTML = '';
+
+  if(!rows.length){
+    grid.innerHTML = '<div class="garmin-empty">No hay datos de Garmin en este rango.</div>';
+    return;
+  }
+
+  const labels = rows.map(r=>r.date);
+
+  GARMIN_METRICS.forEach(metric=>{
+    const vals = rows.map(r=>r[metric.key]);
+    if(!vals.some(v=>v!==null && v!==undefined)) return;
+    const last = [...vals].reverse().find(v=>v!==null && v!==undefined);
+
+    const card = document.createElement('div');
+    card.className = 'garmin-card';
+    const chartId = 'garmin-chart-'+metric.key;
+    card.innerHTML = `
+      <div class="card-title">${metric.label}</div>
+      <div class="card-value">${last===undefined?'—':(Number.isInteger(last)?last:last.toFixed(1))} <span class="card-unit">${metric.unit}</span></div>
+      <div class="garmin-chart"><canvas id="${chartId}"></canvas></div>
+    `;
+    grid.appendChild(card);
+
+    garminCharts[metric.key] = new Chart(document.getElementById(chartId), {
+      type:'line',
+      data:{ labels, datasets:[{
+        data: vals, borderColor: metric.color, backgroundColor: metric.color,
+        spanGaps:true, tension:0.25, pointRadius: labels.length>60?0:2, borderWidth:1.5,
+      }]},
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip: chartTooltipTheme, analysisLines:{dates: analysisMarkersISO} },
+        scales:{
+          y:{ ticks:{font:{size:10}, color:CHART_INK}, grid:{color:CHART_GRID} },
+          x:{ ticks:{font:{size:10}, color:CHART_INK, maxTicksLimit:6, autoSkip:true}, grid:{color:CHART_GRID} },
+        },
+      }
+    });
+  });
+}
+
+function initGarminTab(){
+  if(typeof GARMIN_DAILY === 'undefined' || !GARMIN_DAILY || !GARMIN_DAILY.length){
+    document.getElementById('garmin-empty').style.display = '';
+    document.getElementById('garmin-content').style.display = 'none';
+    return;
+  }
+  document.getElementById('garmin-empty').style.display = 'none';
+  document.getElementById('garmin-content').style.display = '';
+
+  const btnsEl = document.getElementById('range-btns');
+  GARMIN_RANGES.forEach(r=>{
+    const btn = document.createElement('button');
+    btn.className = 'range-btn' + (r.days===currentRangeDays ? ' active':'');
+    btn.textContent = r.label;
+    btn.addEventListener('click', ()=>{
+      currentRangeDays = r.days;
+      document.querySelectorAll('.range-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      renderGarminGrid();
+    });
+    btnsEl.appendChild(btn);
+  });
+
+  renderGarminGrid();
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+    if(btn.dataset.tab === 'garmin' && !garminInitialized){
+      garminInitialized = true;
+      initGarminTab();
+    }
+  });
+});
+</script>
+
+</body>
+</html>

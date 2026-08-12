@@ -1,0 +1,13 @@
+{
+  "date": "2026-01-09",
+  "steps": 5985,
+  "resting_hr": 46,
+  "avg_stress": 29,
+  "sleep_hours": 8.57,
+  "sleep_score": 85,
+  "body_weight_kg": null,
+  "body_fat_pct": null,
+  "hrv_status": "BALANCED",
+  "calories_total": 2764.0,
+  "active_minutes": 72
+}

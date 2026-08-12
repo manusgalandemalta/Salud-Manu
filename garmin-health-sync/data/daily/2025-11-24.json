@@ -1,0 +1,13 @@
+{
+  "date": "2025-11-24",
+  "steps": 5454,
+  "resting_hr": 49,
+  "avg_stress": 46,
+  "sleep_hours": 4.1,
+  "sleep_score": 31,
+  "body_weight_kg": null,
+  "body_fat_pct": null,
+  "hrv_status": "BALANCED",
+  "calories_total": 2332.0,
+  "active_minutes": 68
+}
